@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>3D N-Back Improved v2</title>
+<style>
+body {
+  margin:0;
+  font-family:system-ui, sans-serif;
+  background:linear-gradient(135deg,#0f172a,#1e293b);
+  color:white;
+}
+
+#hud {
+  position:absolute;
+  top:10px;
+  right:15px;
+  text-align:right;
+  font-size:14px;
+  opacity:0.9;
+}
+
+#game {
+  width:100vw;
+  height:70vh;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  perspective:1000px;
+  overflow:hidden;
+  position:relative;
+}
+
+.cube {
+  width:60px;
+  height:60px;
+  position:absolute;
+  transform-style:preserve-3d;
+}
+
+.face {
+  position:absolute;
+  width:60px;
+  height:60px;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  font-size:22px;
+  font-weight:bold;
+  border:1px solid rgba(255,255,255,0.15);
+  background:rgba(255,255,255,0.05);
+}
+
+.front  { transform: rotateY(0deg) translateZ(30px); }
+.back   { transform: rotateY(180deg) translateZ(30px); }
+.right  { transform: rotateY(90deg) translateZ(30px); }
+.left   { transform: rotateY(-90deg) translateZ(30px); }
+.top    { transform: rotateX(90deg) translateZ(30px); }
+.bottom { transform: rotateX(-90deg) translateZ(30px); }
+
+.controls {
+  height:30vh;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:10px;
+}
+
+.row { display:flex; gap:10px; }
+
+button {
+  padding:10px 14px;
+  border:none;
+  border-radius:12px;
+  background:#334155;
+  color:white;
+  cursor:pointer;
+  transition:0.2s;
+}
+button:hover { background:#475569; }
+button.correct { background:#16a34a !important; }
+button.wrong { background:#dc2626 !important; }
+
+#settingsPanel {
+  position:absolute;
+  top:0;
+  left:0;
+  width:280px;
+  height:100%;
+  background:linear-gradient(180deg,#020617,#0f172a);
+  padding:18px;
+  display:none;
+  box-shadow:0 0 30px rgba(0,0,0,0.7);
+  z-index:10;
+}
+
+#settingsPanel h3 { margin-top:5px; }
+
+.setting {
+  margin-bottom:12px;
+  display:flex;
+  flex-direction:column;
+  font-size:14px;
+}
+
+input[type="number"] {
+  padding:6px;
+  border-radius:6px;
+  border:none;
+  margin-top:4px;
+}
+
+label {
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+}
+
+#gear {
+  position:absolute;
+  top:10px;
+  left:10px;
+  z-index:11;
+}
+</style>
+</head>
+<body>
+
+<div id="hud">
+  Accuracy: <span id="acc">100%</span><br>
+  Time: <span id="time">0s</span>
+</div>
+
+<button id="gear" onclick="toggleSettings()">⚙</button>
+
+<div id="settingsPanel">
+  <button onclick="toggleSettings()">Close</button>
+  <h3>Settings</h3>
+
+  <div class="setting">Cells<input id="cells" type="number" value="6"></div>
+  <div class="setting">Speed<input id="speed" type="number" value="0.5" step="0.1"></div>
+  <div class="setting">Delay(ms)<input id="delay" type="number" value="2000"></div>
+  <div class="setting">N Level<input id="nlevel" type="number" value="2"></div>
+
+  <div class="setting"><label>Shape<input id="shape" type="checkbox"></label></div>
+  <div class="setting"><label>Audio<input id="audio" type="checkbox"></label></div>
+</div>
+
+<div id="game"></div>
+
+<div class="controls">
+  <div class="row">
+    <button onclick="startGame()">Start</button>
+    <button onclick="stopGame()">Stop</button>
+  </div>
+  <div class="row">
+    <button id="btn-position" onclick="press('position',this)">Position</button>
+    <button id="btn-color" onclick="press('color',this)">Color</button>
+    <button id="btn-shape" onclick="press('shape',this)">Shape</button>
+    <button id="btn-audio" onclick="press('audio',this)">Audio</button>
+  </div>
+</div>
+
+<script>
+let cubes=[];
+let history=[];
+let current;
+let running=false;
+let interval;
+let correct=0, total=0;
+let pressedFlags={};
+let startTime;
+
+const colors=['#ef4444','#22c55e','#3b82f6','#eab308','#a855f7'];
+const shapes=['●','▲','■','◆'];
+const tones=[200,300,400,500];
+
+let audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+
+function toggleSettings(){
+  let p=document.getElementById('settingsPanel');
+  p.style.display = (p.style.display==='block')?'none':'block';
+}
+
+function createCube(){
+  let c=document.createElement('div');
+  c.className='cube';
+  let faces=['front','back','right','left','top','bottom'];
+  faces.forEach(f=>{
+    let d=document.createElement('div');
+    d.className='face '+f;
+    c.appendChild(d);
+  });
+
+  c.x=Math.random()*200-100;
+  c.y=Math.random()*120-60;
+  c.z=Math.random()*120-60;
+
+  c.vx=Math.random()*1.5-0.75;
+  c.vy=Math.random()*1.5-0.75;
+  c.vz=Math.random()*1.5-0.75;
+
+  c.rx=Math.random()*360;
+  c.ry=Math.random()*360;
+
+  return c;
+}
+
+function createCubes(n){
+  let g=document.getElementById('game');
+  g.innerHTML='';
+  cubes=[];
+  for(let i=0;i<n;i++){
+    let c=createCube();
+    g.appendChild(c);
+    cubes.push(c);
+  }
+}
+
+function animate(){
+  if(!running) return;
+  let speed=+document.getElementById('speed').value;
+
+  cubes.forEach(c=>{
+    c.x+=c.vx*speed;
+    c.y+=c.vy*speed;
+    c.z+=c.vz*speed;
+
+    if(c.x>200||c.x<-200) c.vx*=-1;
+    if(c.y>120||c.y<-120) c.vy*=-1;
+    if(c.z>120||c.z<-120) c.vz*=-1;
+
+    c.rx+=1*speed;
+    c.ry+=1.2*speed;
+
+    c.style.transform=`translate3d(${c.x}px,${c.y}px,${c.z}px) rotateX(${c.rx}deg) rotateY(${c.ry}deg)`;
+  });
+
+  requestAnimationFrame(animate);
+}
+
+function playTone(f){
+  let o=audioCtx.createOscillator();
+  o.frequency.value=f;
+  o.connect(audioCtx.destination);
+  o.start();
+  setTimeout(()=>o.stop(),150);
+}
+
+function nextStimulus(){
+  pressedFlags={};
+  let i=Math.floor(Math.random()*cubes.length);
+  let color=colors[Math.floor(Math.random()*colors.length)];
+  let shape=shapes[Math.floor(Math.random()*shapes.length)];
+  let tone=tones[Math.floor(Math.random()*tones.length)];
+
+  cubes.forEach(c=>{
+    [...c.children].forEach(f=>{
+      f.style.background='rgba(255,255,255,0.05)';
+      f.textContent='';
+      f.style.color='white';
+    });
+  });
+
+  let cube=cubes[i];
+  let shapeOn=document.getElementById('shape').checked;
+  let audioOn=document.getElementById('audio').checked;
+
+  [...cube.children].forEach(f=>{
+    if(shapeOn){
+      f.textContent=shape;
+      f.style.color=color;
+    } else {
+      f.style.background=color;
+    }
+  });
+
+  if(audioOn) playTone(tone);
+
+  current={i,color,shape,tone};
+  history.push(current);
+}
+
+function press(type,btn){
+  let key = type+'-'+(history.length-1);
+  if(pressedFlags[key]) return;
+  pressedFlags[key]=true;
+  let n=+document.getElementById('nlevel').value;
+  if(history.length<=n) return;
+
+  let prev=history[history.length-1-n];
+  let ok=false;
+
+  if(type==='position') ok=prev.i===current.i;
+  if(type==='color') ok=prev.color===current.color;
+  if(type==='shape') ok=prev.shape===current.shape;
+  if(type==='audio') ok=prev.tone===current.tone;
+
+  total++;
+  if(ok) correct++;
+
+  updateAccuracy();
+
+  btn.classList.add(ok?'correct':'wrong');
+  setTimeout(()=>btn.classList.remove('correct','wrong'),300);
+}
+
+function checkMisses(){
+  let n=+document.getElementById('nlevel').value;
+  if(history.length<=n) return;
+
+  let prev=history[history.length-1-n];
+let shapeOn=document.getElementById('shape').checked;
+  let audioOn=document.getElementById('audio').checked;
+  let required={
+    position: prev.i===current.i,
+    color: prev.color===current.color
+  };
+  if(shapeOn){
+  required={
+    position: prev.i===current.i,
+    color: prev.color===current.color,
+    shape: prev.shape===current.shape
+    };
+}
+if(audioOn){
+  required={
+    position: prev.i===current.i,
+    color: prev.color===current.color,
+    audio: prev.tone===current.tone
+    };
+}
+  if(shapeOn && audioOn){
+  required={
+    position: prev.i===current.i,
+    color: prev.color===current.color,
+    shape: prev.shape===current.shape,
+    audio: prev.tone===current.tone
+    };
+}
+  Object.keys(required).forEach(type=>{
+    let key = type+'-'+(history.length-1);
+    if(required[type] && !pressedFlags[key]){
+      total++;
+      updateAccuracy();
+      document.getElementById('btn-'+type).classList.add('wrong');
+      setTimeout(()=>document.getElementById('btn-'+type).classList.remove('wrong'),300);
+    }
+  });
+}
+
+function updateAccuracy(){
+  let acc = total ? Math.round((correct/total)*100) : 100;
+  document.getElementById('acc').textContent = acc+'%';
+}
+
+function updateTime(){
+  if(!running) return;
+  let t = Math.floor((Date.now()-startTime)/1000);
+  document.getElementById('time').textContent = t+'s';
+  requestAnimationFrame(updateTime);
+}
+
+function startGame(){
+  history=[];
+  correct=0;
+  total=0;
+  updateAccuracy();
+
+  createCubes(+document.getElementById('cells').value);
+  running=true;
+  startTime=Date.now();
+
+  animate();
+  updateTime();
+
+  clearInterval(interval);
+  let delay = +document.getElementById('delay').value;
+  interval=setInterval(()=>{
+    checkMisses();
+    nextStimulus();
+  }, delay);
+}
+
+function stopGame(){
+  running=false;
+  clearInterval(interval);
+}
+</script>
+
+</body>
+</html>
