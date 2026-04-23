@@ -32,31 +32,31 @@ body {
 }
 
 .cube {
-  width:80px;
-  height:80px;
+  width:120px;
+  height:120px;
   position:absolute;
   transform-style:preserve-3d;
 }
 
 .face {
   position:absolute;
-  width:80px;
-  height:80px;
+  width:120px;
+  height:120px;
   display:flex;
   justify-content:center;
   align-items:center;
-  font-size:28px;
+  font-size:30px;
   font-weight:bold;
   border:1px solid rgba(255,255,255,0.15);
   background:rgba(255,255,255,0.05);
 }
 
-.front  { transform: rotateY(0deg) translateZ(30px); }
-.back   { transform: rotateY(180deg) translateZ(30px); }
-.right  { transform: rotateY(90deg) translateZ(30px); }
-.left   { transform: rotateY(-90deg) translateZ(30px); }
-.top    { transform: rotateX(90deg) translateZ(30px); }
-.bottom { transform: rotateX(-90deg) translateZ(30px); }
+.front  { transform: rotateY(0deg) translateZ(60px); }
+.back   { transform: rotateY(180deg) translateZ(60px); }
+.right  { transform: rotateY(90deg) translateZ(60px); }
+.left   { transform: rotateY(-90deg) translateZ(60px); }
+.top    { transform: rotateX(90deg) translateZ(60px); }
+.bottom { transform: rotateX(-90deg) translateZ(60px); }
 
 .controls {
   height:30vh;
@@ -70,9 +70,9 @@ body {
 .row { display:flex; gap:10px; }
 
 button {
-  padding:20px 28px;
+  padding:30px 42px;
   border:none;
-  border-radius:15px;
+  border-radius:20px;
   background:#334155;
   color:white;
   cursor:pointer;
